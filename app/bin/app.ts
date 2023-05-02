@@ -31,7 +31,7 @@ if (!isValid) {
 }
 
 const app = new cdk.App();
-new AppStack(app, 'AppStack', config, { //props:
+new AppStack(app, config['stackName'], config['devices'], { //props:
 
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,

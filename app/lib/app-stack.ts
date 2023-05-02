@@ -15,14 +15,15 @@ interface IoTGardenDevice {
 }
 
 export interface Config {
+  stackName: string;
   devices: IoTGardenDevice[];
 }
 
 export class AppStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, config: Config, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, devices: IoTGardenDevice[], props?: cdk.StackProps) {
     super(scope, id, props);
 
-    config.devices.forEach((device: IoTGardenDevice) => {
+    devices.forEach((device: IoTGardenDevice) => {
       // Create a new AWS IoT Thing using the props passed
       new iot.CfnThing(this, toPascalCase(device.thingName), {
         ...device

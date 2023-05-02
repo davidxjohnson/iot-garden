@@ -1,4 +1,5 @@
 {
+    "stackName": "my-iot-garden",
     "devices": [
         {
             "thingName": "my-iot-garden-37206",
