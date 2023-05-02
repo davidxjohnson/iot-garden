@@ -1,10 +1,24 @@
 {
-    "thingName": "my-iot-garden-thing",
-    "attributePayload": {
-        "attributes": {
-            "temperatureRange": "65,95",
-            "moistureRange": "50,80",
-            "followSun": "true"
+    "devices": [
+        {
+            "thingName": "my-iot-garden-37206",
+            "attributePayload": {
+                "attributes": {
+                    "temperatureRange": "65,95",
+                    "moistureRange": "50,80",
+                    "followSun": "true"
+                }
+            }
+        },
+        {
+            "thingName": "my-iot-garden-80233",
+            "attributePayload": {
+                "attributes": {
+                    "temperatureRange": "70,90",
+                    "moistureRange": "40,60",
+                    "followSun": "false"
+                }
+            }
         }
-    }
+    ]
 }
