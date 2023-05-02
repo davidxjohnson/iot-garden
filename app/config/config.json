@@ -1,0 +1,10 @@
+{
+    "thingName": "my-iot-garden-thing",
+    "attributePayload": {
+        "attributes": {
+            "temperatureRange": "65,95",
+            "moistureRange": "50,80",
+            "followSun": "true"
+        }
+    }
+}
