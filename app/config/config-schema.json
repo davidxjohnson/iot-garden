@@ -1,11 +1,13 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "IoT Garden Stack schema",
     "type": "object",
     "properties": {
         "stackName": {
+            "type": "string"
+        },
+        "customerId": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[0-9]{12}$"
         },
         "devices": {
             "type": "array",
@@ -14,36 +16,43 @@
                 "properties": {
                     "thingName": {
                         "type": "string",
-                        "minLength": 1
+                        "pattern": "^[a-zA-Z0-9_-]+$"
                     },
                     "attributePayload": {
                         "type": "object",
                         "properties": {
                             "attributes": {
                                 "type": "object",
-                                "minProperties": 1,
-                                "additionalProperties": {
-                                    "type": "string"
-                                }
+                                "properties": {
+                                    "mcu": {
+                                        "type": "string"
+                                    },
+                                    "mac": {
+                                        "type": "string",
+                                        "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+                                    }
+                                },
+                                "required": [
+                                    "mcu",
+                                    "mac"
+                                ]
                             }
                         },
                         "required": [
                             "attributes"
-                        ],
-                        "additionalProperties": false
+                        ]
                     }
                 },
                 "required": [
                     "thingName",
                     "attributePayload"
-                ],
-                "additionalProperties": false
+                ]
             }
         }
     },
     "required": [
         "stackName",
+        "customerId",
         "devices"
-    ],
-    "additionalProperties": false
+    ]
 }

@@ -1,23 +1,22 @@
 {
-    "stackName": "my-iot-garden",
+    "stackName": "iot-garden",
+    "customerId": "123456789012",
     "devices": [
         {
-            "thingName": "my-iot-garden-37206",
+            "thingName": "iot-garden-37206",
             "attributePayload": {
                 "attributes": {
-                    "temperatureRange": "65,95",
-                    "moistureRange": "50,80",
-                    "followSun": "true"
+                    "mcu": "ESP32-DEVKITC-32D",
+                    "mac": "5E:8E:5B:F6:11:C9"
                 }
             }
         },
         {
-            "thingName": "my-iot-garden-80233",
+            "thingName": "iot-garden-80233",
             "attributePayload": {
                 "attributes": {
-                    "temperatureRange": "70,90",
-                    "moistureRange": "40,60",
-                    "followSun": "false"
+                    "mcu": "ESP32-DEVKITC-32D",
+                    "mac": "00:1A:C2:7B:00:47"
                 }
             }
         }

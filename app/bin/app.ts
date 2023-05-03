@@ -4,7 +4,7 @@ import * as cdk from 'aws-cdk-lib';
 import Ajv from 'ajv';
 var fs = require('fs');
 import { Command } from 'commander';
-import { Config, AppStack } from '../lib/app-stack';
+import { IotGardenConfig, IotGardenStack } from '../lib/app-stack';
 
 const flags: Command = new Command();
 flags
@@ -16,22 +16,23 @@ const configFile: string = flags.opts()['config'];
 const schemaFile: string = flags.opts()['schema'];
 
 // Load the configuration file and config schema file
-const config: Config = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+const config: IotGardenConfig = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
 const configSchema = JSON.parse(fs.readFileSync(schemaFile, 'utf-8'));
 
 // Create a new instance of the Ajv validator
+// Validate the configuration file against the JSON schema
 const ajv = new Ajv();
 const validate = ajv.compile(configSchema);
-
-// Validate the configuration file against the JSON schema
 const isValid = validate(config);
 if (!isValid) {
-  console.error('Invalid configuration file:', validate.errors);
-  // process.exit(1);
+  console.error('Invalid configuration file:', configFile, validate.errors);
+  process.exit(1);
 }
 
+// create the stack for a single customer in mind
 const app = new cdk.App();
-new AppStack(app, config['stackName'], config['devices'], { //props:
+const stackName = config['stackName'] + '-' + config['customerId'];
+new IotGardenStack(app, stackName, config, { //props:
 
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
