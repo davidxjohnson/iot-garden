@@ -1,0 +1,51 @@
+import {
+    IoTClient,
+    CreateThingCommand,
+    CreateKeysAndCertificateCommand,
+    AttachThingPrincipalCommand,
+} from "@aws-sdk/client-iot";
+
+const iotClient = new IoTClient({ region: "YOUR_REGION" });
+
+async function createThingAndCertificate(thingName: string) {
+    try {
+        // Create the thing
+        const createThingCommand = new CreateThingCommand({ thingName });
+        await iotClient.send(createThingCommand);
+
+        console.log(`Thing "${thingName}" created`);
+
+        // Create a certificate and get the certificate ARN and key pair
+        const createKeysAndCertificateCommand = new CreateKeysAndCertificateCommand({
+            setAsActive: true,
+        });
+        const response = await iotClient.send(createKeysAndCertificateCommand);
+        const certificateArn = response.certificateArn;
+        const certificatePem = response.certificatePem;
+        const keyPair = {
+            publicKey: response.keyPair?.PublicKey,
+            privateKey: response.keyPair?.PrivateKey,
+        };
+
+        console.log(`Certificate created: ${certificateArn}`);
+
+        // Attach the principal to the thing
+        const attachThingPrincipalCommand = new AttachThingPrincipalCommand({
+            principal: certificateArn,
+            ThingName: thingName,
+        });
+        await iotClient.send(attachThingPrincipalCommand);
+
+        console.log(`Certificate ${certificateArn} associated with thing ${thingName}`);
+
+        return { certificateArn, certificatePem, keyPair };
+    } catch (error) {
+        console.error(`Error creating thing and certificate: ${error}`);
+    }
+}
+
+const thingName = "YOUR_THING_NAME";
+const { certificateArn, certificatePem, keyPair } = await createThingAndCertificate(thingName);
+console.log(`Certificate PEM: ${certificatePem}`);
+console.log(`Public key: ${keyPair.publicKey}`);
+console.log(`Private key: ${keyPair.privateKey}`);
