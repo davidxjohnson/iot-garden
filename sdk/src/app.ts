@@ -1,9 +1,31 @@
-import { queryThings } from "./iot-cruds.js";
+import {
+    queryThings,
+    createPolicyDocument,
+    createThingGroup
+} from "./iot-cruds.js";
 
-const things = await queryThings('attributes.customerId:123456789012');
+const things = await queryThings('attributes.customerId:123456789012')
+    .catch((err) => {
+        console.info("queryThings returned error:", err);
+        process.exit(1);
+    });
 console.info("queryThings returned:", things);
 
-// Specify the policy name and document
+const policyDocument = await createPolicyDocument('123456789012')
+    .catch((err) => {
+        console.info("createPolicyDocument returned error:", err);
+        process.exit(1);
+    });
+console.info("createPolicyDocument returned:", policyDocument);
+
+const thingGroupArn = await createThingGroup('123456789012', 'iot-garden')
+    .catch((err) => {
+        console.info("createThingGroup returned error:", err);
+        process.exit(1);
+    });
+console.info("createThingGroup returned:", thingGroupArn)
+
+    // Specify the policy name and document
 // const policyName = 'test';
 // const policyDocument = {};
 
