@@ -1,7 +1,9 @@
 import {
     queryThings,
     createPolicyDocument,
-    createThingGroup
+    createThingGroup,
+    createThing,
+    addThingToThingGroup
 } from "./iot-cruds.js";
 
 const things = await queryThings('attributes.customerId:123456789012')
@@ -18,12 +20,26 @@ const policyDocument = await createPolicyDocument('123456789012')
     });
 console.info("createPolicyDocument returned:", policyDocument);
 
-const thingGroupArn = await createThingGroup('123456789012', 'iot-garden')
+const thingGroupArn = await createThingGroup('123456789012', 'iot-garden-123456789012')
     .catch((err) => {
         console.info("createThingGroup returned error:", err);
         process.exit(1);
     });
 console.info("createThingGroup returned:", thingGroupArn)
+
+const thingArn = await createThing('123456789012', 'iot-garden-thing-123456789012-001')
+    .catch((err) => {
+        console.info("createThing returned error:", err);
+        process.exit(1);
+    });
+console.info("createThing returned:", thingArn)
+
+await addThingToThingGroup(thingArn, thingGroupArn)
+    .catch((err) => {
+        console.info("addThingToThingGroup returned error:", err);
+        process.exit(1);
+    });
+console.info("addThingToThingGroup: thing iot-garden-123456789012-001 added to group iot-garden-123456789012")
 
     // Specify the policy name and document
 // const policyName = 'test';
