@@ -13,7 +13,8 @@ import {
     DescribeThingGroupCommand,
     DescribeThingGroupCommandOutput,
     DescribeThingCommand,
-    DescribeThingCommandOutput
+    DescribeThingCommandOutput,
+    GetPolicyCommand, GetPolicyCommandOutput, CreatePolicyCommandOutput
 } from '@aws-sdk/client-iot';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
@@ -64,7 +65,17 @@ export async function describeThing(thingName: string, region: string): Promise<
     return response;
 }
 
-export async function createThing(customerId: string, thingName: string, region: string): Promise<string> {
+export async function createThing(customerId: string, thingName: string, region: string): Promise<DescribeThingCommandOutput> {
+    // check if thing group exists and return data if it does
+    const thingExists = await describeThing(thingName, region)
+        .catch((error) => {
+            if (error.name !== 'ResourceNotFoundException') {
+                throw error;
+            }
+        });
+    if (thingExists !== undefined) {
+        return thingExists // resource exists, return description
+    }
     // Create the thing
     const command = new CreateThingCommand({
         thingName: thingName,
@@ -81,7 +92,8 @@ export async function createThing(customerId: string, thingName: string, region:
 
     const response = await iotClient.send(command);
     iotClient.destroy();
-    return response.thingArn ?? '';
+    response.$metadata.httpStatusCode = 201;
+    return response ?? '';
 }
 
 export async function describeThingGroup(thingGroupName: string, region: string): Promise<DescribeThingGroupCommandOutput> {
@@ -94,16 +106,28 @@ export async function describeThingGroup(thingGroupName: string, region: string)
     return response;
 }
 
+export async function getPolicy(policyName: string, region: string): Promise<GetPolicyCommandOutput> {
+    // Describe a policy with a given name
+    const input = {
+        policyName: policyName, // required
+    };
+
+    const iotClient = new IoTClient({ region: region });
+    const response: GetPolicyCommandOutput = await iotClient.send(new GetPolicyCommand(input));
+    return response;
+}
+
 export async function createThingGroup(customerId: string, thingGroupName: string, region: string): Promise<CreateThingGroupCommandOutput> {
-    // check if thing group exists and return arn if it does
-    await describeThingGroup(thingGroupName, region)
-        .catch(() => {
-            // console.info("inside catch") - // break out of catch block
-        })
-        .then((data) => { // thingGroupName exists
-            console.info(`thing group ${thingGroupName} exists`);
-            return data;
+    // check if thing group exists and return data if it does
+    const groupExists = await describeThingGroup(thingGroupName, region)
+        .catch((error) => {
+            if (error.name !== 'ResourceNotFoundException') {
+                throw error;
+            }
         });
+    if (groupExists !== undefined) {
+        return groupExists // resource exists, return description
+    }
     // Create the thing group
     const thingGroupProperties: ThingGroupProperties = {
         attributePayload: {
@@ -141,7 +165,17 @@ export async function queryThings(queryString: string, region: string): Promise<
     return things as string[];
 }
 
-export async function createPolicy(customerId: string, policyName: string, region: string, account: string): Promise<string> {
+export async function createPolicy(customerId: string, policyName: string, region: string, account: string): Promise<CreatePolicyCommandOutput> {
+    // check if thing group exists and return data if it does
+    const policyExists = await getPolicy(policyName, region)
+        .catch((error) => {
+            if (error.name !== 'ResourceNotFoundException') {
+                throw error;
+            }
+        });
+    if (policyExists !== undefined) {
+        return policyExists // resource exists, return description
+    }
     // create a policy
     const policyDocument = await createPolicyDocument(customerId, region, account);
     const input = {
@@ -157,7 +191,9 @@ export async function createPolicy(customerId: string, policyName: string, regio
     const command = new CreatePolicyCommand(input);
     const iotClient = new IoTClient({ region: region });
     const response = await iotClient.send(command);
-    return response.policyArn ?? '';
+    iotClient.destroy();
+    response.$metadata.httpStatusCode = 201;
+    return response;
 }
 // creates a custom policy document based on customerId
 export async function createPolicyDocument(customerId: string, region: string, account: string): Promise<string> {

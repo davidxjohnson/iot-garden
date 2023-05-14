@@ -39,24 +39,31 @@ const thingGroup = await createThingGroup(customerId, groupName, region)
         process.exit(1);
     });
 if (thingGroup.$metadata.httpStatusCode === 200) {
-    console.info(thingGroup.$metadata.httpStatusCode + " thingGroup " + groupName + " already exists. Using existing thingGroup.")
-}
+    console.info("thingGroup " + groupName + " exists.")
+};
 const thingGroupArn = thingGroup.thingGroupArn ?? '';
-console.info("createThingGroup returned:", thingGroupArn)
+console.info("thingGroupArn:", thingGroupArn)
 
-const thingArn = await createThing(customerId, thingName, region)
+const thing = await createThing(customerId, thingName, region)
     .catch((err) => {
         console.info("createThing returned error:", err);
         process.exit(1);
     });
-console.info("createThing returned:", thingArn)
+if (thing.$metadata.httpStatusCode === 200) {
+    console.info("thing " + thingName + " exists.")
+};
+const thingArn = thing.thingArn ?? '';
+console.info("thingArn:", thingArn)
 
-let policyArn = await createPolicy(customerId, policyName, region, account)
+let policy = await createPolicy(customerId, policyName, region, account)
     .catch((err) => {
         console.info("createPolicy returned error:", err);
         process.exit(1);
     });
-
+if (policy.$metadata.httpStatusCode === 200) {
+    console.info("policy " + policyName + " exists.")
+};
+const policyArn = policy.policyArn ?? '';
 console.info("createPolicy returned:", policyArn);
 
 await attachPolicy(policyName, thingGroupArn, region)
