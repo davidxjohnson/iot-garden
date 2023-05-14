@@ -1,105 +1,74 @@
 import {
+    discoverDefaultRegion,
+    discoverDefaultAccount,
     queryThings,
-    createPolicyDocument,
+    createPolicy,
     createThingGroup,
     createThing,
-    addThingToThingGroup
+    addThingToThingGroup,
+    attachPolicy
 } from "./iot-cruds.js";
 
-const things = await queryThings('attributes.customerId:123456789012')
+// resource names
+const customerId = '123456789012';
+const namePrefix = 'iot-garden';
+const thingQuery = 'thingName:' + namePrefix + '-*';
+const groupName = namePrefix + '-group-' + customerId;
+const thingName = namePrefix + '-thing-' + customerId + '-001';
+const policyName = namePrefix + '-policy-' + customerId;
+
+// Set up IoT client with AWS region
+let region, account = undefined;
+if (typeof (region) === 'undefined') {
+    region = await discoverDefaultRegion()
+};
+if (typeof (account) === 'undefined') {
+    account = await discoverDefaultAccount()
+};
+
+const things = await queryThings(thingQuery, region)
     .catch((err) => {
         console.info("queryThings returned error:", err);
         process.exit(1);
     });
 console.info("queryThings returned:", things);
 
-const policyDocument = await createPolicyDocument('123456789012')
-    .catch((err) => {
-        console.info("createPolicyDocument returned error:", err);
-        process.exit(1);
-    });
-console.info("createPolicyDocument returned:", policyDocument);
-
-const thingGroupArn = await createThingGroup('123456789012', 'iot-garden-123456789012')
+const thingGroup = await createThingGroup(customerId, groupName, region)
     .catch((err) => {
         console.info("createThingGroup returned error:", err);
         process.exit(1);
     });
+if (thingGroup.$metadata.httpStatusCode === 200) {
+    console.info(thingGroup.$metadata.httpStatusCode + " thingGroup " + groupName + " already exists. Using existing thingGroup.")
+}
+const thingGroupArn = thingGroup.thingGroupArn ?? '';
 console.info("createThingGroup returned:", thingGroupArn)
 
-const thingArn = await createThing('123456789012', 'iot-garden-thing-123456789012-001')
+const thingArn = await createThing(customerId, thingName, region)
     .catch((err) => {
         console.info("createThing returned error:", err);
         process.exit(1);
     });
 console.info("createThing returned:", thingArn)
 
-await addThingToThingGroup(thingArn, thingGroupArn)
+let policyArn = await createPolicy(customerId, policyName, region, account)
+    .catch((err) => {
+        console.info("createPolicy returned error:", err);
+        process.exit(1);
+    });
+
+console.info("createPolicy returned:", policyArn);
+
+await attachPolicy(policyName, thingGroupArn, region)
+    .catch((err) => {
+        console.info("attachPolicy returned error:", err);
+        process.exit(1);
+    });
+console.info("attachPolicy: " + policyArn + " added to " + thingGroupArn);
+
+await addThingToThingGroup(thingArn, thingGroupArn, region)
     .catch((err) => {
         console.info("addThingToThingGroup returned error:", err);
         process.exit(1);
     });
-console.info("addThingToThingGroup: thing iot-garden-123456789012-001 added to group iot-garden-123456789012")
-
-    // Specify the policy name and document
-// const policyName = 'test';
-// const policyDocument = {};
-
-// // Create the policy using the IoT client
-// const createPolicyInput = {
-//     policyName: policyName,
-//     policyDocument: JSON.stringify(policyDocument)
-// };
-// const createPolicyCommand = new CreatePolicyCommand(createPolicyInput);
-// const createPolicyResponse = await iotClient.send(createPolicyCommand)
-//     .catch((err) => {
-//         console.error(err);
-//         // process.exit(1);
-//     });
-
-// console.info("create policy returned:", createPolicyResponse);
-
-// // list policies using the IoT client
-// const listPoliciesInput = {
-//     marker: "",
-//     pageSize: Number("20"),
-//     ascendingOrder: true
-// };
-// const listPoliciesCommand = new ListPoliciesCommand(listPoliciesInput);
-// const listPoliciesResponse = await iotClient.send(listPoliciesCommand)
-//     .catch((err) => {
-//         console.error(err);
-//         process.exit(1);
-//     });
-
-// console.info("list policies returned:", listPoliciesResponse);
-
-// // attach policy to principal
-// const attachPolicyInput = {
-//     policyName: policyName, // required
-//     target: "arn:aws:iot:us-east-2:836801583228:cert/c8d1aba90288e49f1c5dbb57bc9b82d601ab09204180e9a875bd7a4ba4d7d994" // required
-// };
-// const attachPolicyCommand = new AttachPolicyCommand(attachPolicyInput);
-// const attachPolicyResponse = await iotClient.send(attachPolicyCommand)
-//     .catch((err) => {
-//         console.error(err);
-//         process.exit(1);
-//     });
-
-// console.info("policy attached returned:", attachPolicyResponse);
-
-// // delete a policy using the IoT client
-// const deletePolicyInput = {
-//     policyName: policyName,
-//     policyDocument: JSON.stringify(policyDocument)
-// };
-// const deleteCommand = new DeletePolicyCommand(deletePolicyInput);
-// const deleteResponse = await iotClient.send(deleteCommand)
-//     .then()
-//     .catch((err) => {
-//         console.error(err);
-//         process.exit(1);
-//     });
-
-// console.info("delete policy returned:", deleteResponse);
-
+console.info("addThingToThingGroup: thing " + thingArn + " added to group " + thingGroupArn);

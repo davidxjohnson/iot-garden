@@ -4,22 +4,29 @@ import {
     IoTClient,
     SearchIndexCommand,
     CreateThingGroupCommand,
+    CreateThingGroupCommandOutput,
     ThingGroupProperties,
     CreateThingCommand,
-    AddThingToThingGroupCommand
+    AddThingToThingGroupCommand,
+    CreatePolicyCommand,
+    AttachPolicyCommand,
+    DescribeThingGroupCommand,
+    DescribeThingGroupCommandOutput,
+    DescribeThingCommand,
+    DescribeThingCommandOutput
 } from '@aws-sdk/client-iot';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
     STSClient,
     GetCallerIdentityCommand
 } from '@aws-sdk/client-sts';
+// import { error } from 'console';
 
 // the defaultRegion function is used for cases where the region is required  
 export async function discoverDefaultAccount(): Promise<string> {
-    const stsClient = new STSClient({ credentials: defaultProvider({ profile: 'default' }) });
-
     // Get the caller identity to retrieve the account ID
     const command = new GetCallerIdentityCommand({});
+    const stsClient = new STSClient({ credentials: defaultProvider({ profile: 'default' }) });
     const response = await stsClient.send(command);
     stsClient.destroy();
     return response.Account ?? '';
@@ -34,31 +41,30 @@ export async function discoverDefaultRegion(): Promise<string> {
     return region;
 };
 
-export async function addThingToThingGroup(thingArn: string, thingGroupArn: string, region?: string): Promise<void> {
-    // Set up IoT client with AWS region
-    if (typeof (region) === 'undefined') {
-        region = await discoverDefaultRegion()
-    };
-    const iotClient = new IoTClient({ region: region });
-
+export async function addThingToThingGroup(thingArn: string, thingGroupArn: string, region: string): Promise<void> {
     // Add the thing to the thing group
     const command = new AddThingToThingGroupCommand({
         thingGroupArn: thingGroupArn,
         thingArn: thingArn,
         overrideDynamicGroups: false
     });
+    const iotClient = new IoTClient({ region: region });
     await iotClient.send(command);
     iotClient.destroy();
     return
 }
 
-export async function createThing(customerId: string, thingName: string, region?: string): Promise<string> {
-    // Set up IoT client with AWS region
-    if (typeof (region) === 'undefined') {
-        region = await discoverDefaultRegion()
+export async function describeThing(thingName: string, region: string): Promise<DescribeThingCommandOutput> {
+    // return arn of a thing group with a given name
+    const input = {
+        thingName: thingName, // required
     };
     const iotClient = new IoTClient({ region: region });
+    const response: DescribeThingCommandOutput = await iotClient.send(new DescribeThingCommand(input));
+    return response;
+}
 
+export async function createThing(customerId: string, thingName: string, region: string): Promise<string> {
     // Create the thing
     const command = new CreateThingCommand({
         thingName: thingName,
@@ -70,18 +76,34 @@ export async function createThing(customerId: string, thingName: string, region?
         // tags: [{ Key: 'customerId', Value: customerId }] // tags aren't available for things
     });
 
+    // Set up IoT client with AWS region
+    const iotClient = new IoTClient({ region: region });
+
     const response = await iotClient.send(command);
     iotClient.destroy();
     return response.thingArn ?? '';
 }
 
-export async function createThingGroup(customerId: string, thingGroupName: string, region?: string): Promise<string> {
-    // Set up IoT client with AWS region
-    if (typeof (region) === 'undefined') {
-        region = await discoverDefaultRegion()
+export async function describeThingGroup(thingGroupName: string, region: string): Promise<DescribeThingGroupCommandOutput> {
+    // return arn of a thing group with a given name
+    const input = {
+        thingGroupName: thingGroupName, // required
     };
     const iotClient = new IoTClient({ region: region });
+    const response: DescribeThingGroupCommandOutput = await iotClient.send(new DescribeThingGroupCommand(input));
+    return response;
+}
 
+export async function createThingGroup(customerId: string, thingGroupName: string, region: string): Promise<CreateThingGroupCommandOutput> {
+    // check if thing group exists and return arn if it does
+    await describeThingGroup(thingGroupName, region)
+        .catch(() => {
+            // console.info("inside catch") - // break out of catch block
+        })
+        .then((data) => { // thingGroupName exists
+            console.info(`thing group ${thingGroupName} exists`);
+            return data;
+        });
     // Create the thing group
     const thingGroupProperties: ThingGroupProperties = {
         attributePayload: {
@@ -97,16 +119,16 @@ export async function createThingGroup(customerId: string, thingGroupName: strin
         tags: [{ Key: 'customerId', Value: customerId }]
     });
 
-    const response = await iotClient.send(command);
+    // Set up IoT client with AWS region
+    const iotClient = new IoTClient({ region: region });
+    let response: CreateThingGroupCommandOutput = await iotClient.send(command);
     iotClient.destroy();
-    return response.thingGroupArn ?? '';
+    response.$metadata.httpStatusCode = 201;
+    return response
 }
 
-export async function queryThings(queryString: string, region?: string): Promise<string[]> {
+export async function queryThings(queryString: string, region: string): Promise<string[]> {
     // Query the index using the IoT client
-    if (typeof (region) === 'undefined') {
-        region = await discoverDefaultRegion()
-    };
     const indexName = 'AWS_Things';
     const command = new SearchIndexCommand({
         indexName,
@@ -119,13 +141,26 @@ export async function queryThings(queryString: string, region?: string): Promise
     return things as string[];
 }
 
-export async function createPolicyDocument(customerId: string, region?: string, account?: string): Promise<string> {
-    if (typeof (region) === 'undefined') {
-        region = await discoverDefaultRegion()
-    };
-    if (typeof (account) === 'undefined') {
-        account = await discoverDefaultAccount()
-    };
+export async function createPolicy(customerId: string, policyName: string, region: string, account: string): Promise<string> {
+    // create a policy
+    const policyDocument = await createPolicyDocument(customerId, region, account);
+    const input = {
+        policyName: policyName, // required
+        policyDocument: policyDocument, // required
+        tags: [ // TagList
+            { // Tag
+                Key: "customerId",
+                Value: customerId,
+            },
+        ]
+    }
+    const command = new CreatePolicyCommand(input);
+    const iotClient = new IoTClient({ region: region });
+    const response = await iotClient.send(command);
+    return response.policyArn ?? '';
+}
+// creates a custom policy document based on customerId
+export async function createPolicyDocument(customerId: string, region: string, account: string): Promise<string> {
     const policyDocument = {
         "Version": "2012-10-17",
         "Statement": [
@@ -148,13 +183,15 @@ export async function createPolicyDocument(customerId: string, region?: string, 
     };
     return JSON.stringify(policyDocument);
 }
-//     // Set up IoT client with AWS region
-//     const iotClient = new IoTClient({ region: region });
 
-//     // Create the policy
-//     const command = new CreatePolicyCommand({
-//         policyDocument,
-//         policyName
-//     });
-//     await iotClient.send(command);
-// }
+// attaches a policy to a thingGroup (or other identity)
+export async function attachPolicy(policyName: string, targetArn: string, region: string): Promise<void> {
+    const iotClient = new IoTClient({ region: region });
+    const input = { // AttachPolicyRequest
+        policyName: policyName, // required
+        target: targetArn, // required
+    };
+    const command = new AttachPolicyCommand(input);
+    await iotClient.send(command);
+    return void 0;
+}
