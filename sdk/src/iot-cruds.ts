@@ -3,18 +3,14 @@
 import {
     IoTClient,
     SearchIndexCommand,
-    CreateThingGroupCommand,
-    CreateThingGroupCommandOutput,
-    ThingGroupProperties,
-    CreateThingCommand,
-    AddThingToThingGroupCommand,
-    CreatePolicyCommand,
-    AttachPolicyCommand,
-    DescribeThingGroupCommand,
-    DescribeThingGroupCommandOutput,
-    DescribeThingCommand,
-    DescribeThingCommandOutput,
-    GetPolicyCommand, GetPolicyCommandOutput, CreatePolicyCommandOutput
+    CreateThingGroupCommand, CreateThingGroupCommandOutput, ThingGroupProperties,
+    CreateThingCommand, CreateThingCommandOutput,
+    AddThingToThingGroupCommand, AddThingToThingGroupCommandOutput,
+    DescribeThingGroupCommand, DescribeThingGroupCommandOutput,
+    DescribeThingCommand, DescribeThingCommandOutput,
+    GetPolicyCommand, GetPolicyCommandOutput,
+    CreatePolicyCommand, CreatePolicyCommandOutput,
+    AttachPolicyCommand, AttachPolicyCommandInput, AttachPolicyCommandOutput
 } from '@aws-sdk/client-iot';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
@@ -42,7 +38,7 @@ export async function discoverDefaultRegion(): Promise<string> {
     return region;
 };
 
-export async function addThingToThingGroup(thingArn: string, thingGroupArn: string, region: string): Promise<void> {
+export async function addThingToGroup(thingArn: string, thingGroupArn: string, region: string): Promise<AddThingToThingGroupCommandOutput> {
     // Add the thing to the thing group
     const command = new AddThingToThingGroupCommand({
         thingGroupArn: thingGroupArn,
@@ -50,9 +46,9 @@ export async function addThingToThingGroup(thingArn: string, thingGroupArn: stri
         overrideDynamicGroups: false
     });
     const iotClient = new IoTClient({ region: region });
-    await iotClient.send(command);
+    const response: AddThingToThingGroupCommandOutput = await iotClient.send(command);
     iotClient.destroy();
-    return
+    return response
 }
 
 export async function describeThing(thingName: string, region: string): Promise<DescribeThingCommandOutput> {
@@ -89,8 +85,7 @@ export async function createThing(customerId: string, thingName: string, region:
 
     // Set up IoT client with AWS region
     const iotClient = new IoTClient({ region: region });
-
-    const response = await iotClient.send(command);
+    const response: CreateThingCommandOutput = await iotClient.send(command);
     iotClient.destroy();
     response.$metadata.httpStatusCode = 201;
     return response ?? '';
@@ -221,13 +216,13 @@ export async function createPolicyDocument(customerId: string, region: string, a
 }
 
 // attaches a policy to a thingGroup (or other identity)
-export async function attachPolicy(policyName: string, targetArn: string, region: string): Promise<void> {
-    const iotClient = new IoTClient({ region: region });
-    const input = { // AttachPolicyRequest
+export async function attachPolicy(policyName: string, targetArn: string, region: string): Promise<AttachPolicyCommandOutput> {
+    const input: AttachPolicyCommandInput = { // AttachPolicyRequest
         policyName: policyName, // required
         target: targetArn, // required
     };
-    const command = new AttachPolicyCommand(input);
-    await iotClient.send(command);
-    return void 0;
+    const iotClient = new IoTClient({ region: region });
+    const response: AttachPolicyCommandOutput = await iotClient.send(new AttachPolicyCommand(input));
+    iotClient.destroy();
+    return response;
 }

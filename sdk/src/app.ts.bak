@@ -9,12 +9,6 @@ const iotClient = new IoTClient({ region: "YOUR_REGION" });
 
 async function createThingAndCertificate(thingName: string) {
     try {
-        // Create the thing
-        const createThingCommand = new CreateThingCommand({ thingName });
-        await iotClient.send(createThingCommand);
-
-        console.log(`Thing "${thingName}" created`);
-
         // Create a certificate and get the certificate ARN and key pair
         const createKeysAndCertificateCommand = new CreateKeysAndCertificateCommand({
             setAsActive: true,
