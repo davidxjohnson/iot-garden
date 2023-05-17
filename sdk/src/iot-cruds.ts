@@ -11,7 +11,8 @@ import {
     GetPolicyCommand, GetPolicyCommandOutput,
     CreatePolicyCommand, CreatePolicyCommandOutput,
     AttachPolicyCommand, AttachPolicyCommandInput, AttachPolicyCommandOutput,
-    CreateKeysAndCertificateCommand, CreateKeysAndCertificateCommandOutput
+    CreateKeysAndCertificateCommand, CreateKeysAndCertificateCommandOutput,
+    AttachThingPrincipalCommand
 } from '@aws-sdk/client-iot';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
@@ -21,7 +22,7 @@ import {
 import {
     SSMClient,
     GetParameterCommand, GetParameterCommandOutput,
-    PutParameterCommand, PutParameterCommandOutput
+    PutParameterCommand, PutParameterCommandOutput,
 } from '@aws-sdk/client-ssm';
 // import { stringify } from 'querystring';
 // import { error } from 'console';
@@ -45,7 +46,7 @@ export async function discoverDefaultRegion(): Promise<string> {
     return region;
 };
 
-async function checkCertExists(parameterName: string, region: string): Promise<GetParameterCommandOutput | void> {
+async function getFromParameterStore(parameterName: string, region: string): Promise<GetParameterCommandOutput | void> {
     const ssmClient = new SSMClient({ region: region }); // Replace with your desired region
     const command = new GetParameterCommand({ Name: parameterName, WithDecryption: true });
     const response = await ssmClient.send(command)
@@ -64,7 +65,7 @@ async function checkCertExists(parameterName: string, region: string): Promise<G
 export async function createCertificate(paramPath: string, region: string): Promise<string> {
     // using a naming convention for the parameter name
     const certParam: void | GetParameterCommandOutput =
-        await checkCertExists(`${paramPath}certificateArn`, region)
+        await getFromParameterStore(`${paramPath}certificateArn`, region)
     if (certParam !== undefined) {
         // certificate arn found in parameter store
         return certParam?.Parameter?.Value ?? '';
@@ -83,12 +84,19 @@ export async function createCertificate(paramPath: string, region: string): Prom
     putInParameterStore(`${paramPath}certificatePem`, certificatePem, region);
     putInParameterStore(`${paramPath}publicKey`, publicKey, region);
     putInParameterStore(`${paramPath}privateKey`, privateKey, region);
-    // console.log(certificateArn);
-    // console.log(certificatePem);
-    // console.log(keyPair.publicKey);
-    // console.log(keyPair.privateKey);
-    // store certificate information in parameter store
     return certificateArn;
+};
+
+export async function associateCertificatesWithThing(thingName: string, certificateArn: string, region: string): Promise<boolean> {
+    // Attach the principal to the thing
+    const attachThingPrincipalCommand = new AttachThingPrincipalCommand({
+        principal: certificateArn,
+        thingName: thingName,
+    });
+    const iotClient = new IoTClient({ region: region });
+    await iotClient.send(attachThingPrincipalCommand);
+    iotClient.destroy();
+    return true;
 }
 
 async function putInParameterStore(parameterName: string, parameterValue: string, region: string): Promise<PutParameterCommandOutput> {
@@ -101,6 +109,7 @@ async function putInParameterStore(parameterName: string, parameterValue: string
     const ssmClient = new SSMClient({ region: region });
     const response: PutParameterCommandOutput =
         await ssmClient.send(putParameterCommand);
+    ssmClient.destroy();
     return response
 }
 

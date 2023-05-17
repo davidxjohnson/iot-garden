@@ -8,7 +8,8 @@ import {
     createThing,
     addThingToGroup,
     attachPolicy,
-    createCertificate
+    createCertificate,
+    associateCertificatesWithThing
 } from "./iot-cruds.js";
 
 const flags: Command = new Command()
@@ -101,9 +102,16 @@ await addThingToGroup(thingArn, thingGroupArn, region)
     });
 console.info("thing " + thingName + " joined to group " + groupName)
 
-const certArn = await createCertificate(`/${namePrefix}/${customerId}/`, region)
+const certArn = await createCertificate(`/devices/${thingName}/`, region)
     .catch((err) => {
         console.info("getCertArn returned error:", err);
         process.exit(1);
     });
 console.info(`createCertificate returned: ${certArn}`);
+
+const success: boolean = await associateCertificatesWithThing(thingName, certArn, region)
+    .catch((err) => {
+        console.info("associateCertificatesWithThing returned error:", err);
+        process.exit(1);
+    });
+console.info(`associateCertificatesWithThing returned: ${success}`);
