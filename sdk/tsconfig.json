@@ -12,6 +12,7 @@
     // "resolveJsonModule": true,
     "strict": true,
     "ignoreDeprecations": "5.0",
+    "useUnknownInCatchVariables": false
   },
   "include": [
     "src/**/*.ts"

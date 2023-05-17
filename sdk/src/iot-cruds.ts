@@ -10,13 +10,20 @@ import {
     DescribeThingCommand, DescribeThingCommandOutput,
     GetPolicyCommand, GetPolicyCommandOutput,
     CreatePolicyCommand, CreatePolicyCommandOutput,
-    AttachPolicyCommand, AttachPolicyCommandInput, AttachPolicyCommandOutput
+    AttachPolicyCommand, AttachPolicyCommandInput, AttachPolicyCommandOutput,
+    CreateKeysAndCertificateCommand, CreateKeysAndCertificateCommandOutput
 } from '@aws-sdk/client-iot';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
     STSClient,
     GetCallerIdentityCommand
 } from '@aws-sdk/client-sts';
+import {
+    SSMClient,
+    GetParameterCommand, GetParameterCommandOutput,
+    PutParameterCommand, PutParameterCommandOutput
+} from '@aws-sdk/client-ssm';
+// import { stringify } from 'querystring';
 // import { error } from 'console';
 
 // the defaultRegion function is used for cases where the region is required  
@@ -37,6 +44,65 @@ export async function discoverDefaultRegion(): Promise<string> {
     // console.info(`default account is ${await discoverDefaultAccount() ?? ''}`);
     return region;
 };
+
+async function checkCertExists(parameterName: string, region: string): Promise<GetParameterCommandOutput | void> {
+    const ssmClient = new SSMClient({ region: region }); // Replace with your desired region
+    const command = new GetParameterCommand({ Name: parameterName, WithDecryption: true });
+    const response = await ssmClient.send(command)
+        .catch((err) => {
+            if (err.name !== 'ParameterNotFound') {
+                ssmClient.destroy();
+                throw err; // Certificate does not exist
+            }
+        });
+    ssmClient.destroy();
+    return response;
+};
+
+// function to return the certificate ARN from parameter store, or by creating a new iot certificate
+// and storing the certificate information in parameter store. Either way, a certificate ARN is returned.
+export async function createCertificate(paramPath: string, region: string): Promise<string> {
+    // using a naming convention for the parameter name
+    const certParam: void | GetParameterCommandOutput =
+        await checkCertExists(`${paramPath}certificateArn`, region)
+    if (certParam !== undefined) {
+        // certificate arn found in parameter store
+        return certParam?.Parameter?.Value ?? '';
+    };
+    // Create a certificate
+    const iotClient = new IoTClient({ region: region });
+    const response: CreateKeysAndCertificateCommandOutput =
+        await iotClient
+            .send(new CreateKeysAndCertificateCommand({ setAsActive: true, }));
+    iotClient.destroy();
+    const certificateArn = response.certificateArn ?? '';
+    const certificatePem = response.certificatePem ?? '';
+    const publicKey = response.keyPair?.PublicKey ?? '';
+    const privateKey = response.keyPair?.PrivateKey ?? '';
+    putInParameterStore(`${paramPath}certificateArn`, certificateArn, region);
+    putInParameterStore(`${paramPath}certificatePem`, certificatePem, region);
+    putInParameterStore(`${paramPath}publicKey`, publicKey, region);
+    putInParameterStore(`${paramPath}privateKey`, privateKey, region);
+    // console.log(certificateArn);
+    // console.log(certificatePem);
+    // console.log(keyPair.publicKey);
+    // console.log(keyPair.privateKey);
+    // store certificate information in parameter store
+    return certificateArn;
+}
+
+async function putInParameterStore(parameterName: string, parameterValue: string, region: string): Promise<PutParameterCommandOutput> {
+    const putParameterCommand = new PutParameterCommand({
+        Name: parameterName,
+        Value: parameterValue,
+        Type: "SecureString",
+        Overwrite: true
+    });
+    const ssmClient = new SSMClient({ region: region });
+    const response: PutParameterCommandOutput =
+        await ssmClient.send(putParameterCommand);
+    return response
+}
 
 export async function addThingToGroup(thingArn: string, thingGroupArn: string, region: string): Promise<AddThingToThingGroupCommandOutput> {
     // Add the thing to the thing group

@@ -7,7 +7,8 @@ import {
     createThingGroup,
     createThing,
     addThingToGroup,
-    attachPolicy
+    attachPolicy,
+    createCertificate
 } from "./iot-cruds.js";
 
 const flags: Command = new Command()
@@ -40,6 +41,7 @@ const things = await queryThings(thingQuery, region)
     });
 console.info("List of things:", things);
 
+
 const thingGroup = await createThingGroup(customerId, groupName, region)
     .catch((err) => {
         console.info("createThingGroup returned error:", err);
@@ -52,9 +54,8 @@ switch (thingGroup.$metadata.httpStatusCode) {
     case 201:
         console.info("thingGroup " + groupName + " created.")
         break
-}
+};
 const thingGroupArn = thingGroup.thingGroupArn ?? '';
-// console.info("thingGroupArn:", thingGroupArn)
 
 const policy = await createPolicy(customerId, policyName, region, account)
     .catch((err) => {
@@ -68,9 +69,8 @@ switch (policy.$metadata.httpStatusCode) {
     case 201:
         console.info("thingPolicy " + thingName + " created.")
         break
-}
+};
 // const policyArn = policy.policyArn ?? '';
-// console.info("createPolicy returned:", policyArn);
 
 await attachPolicy(policyName, thingGroupArn, region)
     .catch((err) => {
@@ -100,3 +100,10 @@ await addThingToGroup(thingArn, thingGroupArn, region)
         process.exit(1);
     });
 console.info("thing " + thingName + " joined to group " + groupName)
+
+const certArn = await createCertificate(`/${namePrefix}/${customerId}/`, region)
+    .catch((err) => {
+        console.info("getCertArn returned error:", err);
+        process.exit(1);
+    });
+console.info(`createCertificate returned: ${certArn}`);
