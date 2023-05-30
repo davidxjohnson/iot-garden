@@ -22,18 +22,20 @@ const int oneWireBus = 4;
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
 
-// moisture sensor
+// moisture sensorint
 const int SensorPin = A0;
 int soilMoistureValue = 0;
 int soilmoisturepercent=0;
-const int AirValue = 790;   //you need to replace this value with Value_1
-const int WaterValue = 390;  //you need to replace this value with Value_2
+int soilV33=2; 
+//const int AirValue = 790;   //you need to replace this value with Value_1
+//const int WaterValue = 390;  //you need to replace this value with Value_2
 
 // Setting PWM properties
 // Motor A properties
 int motor1Pin1 = 27; 
 int motor1Pin2 = 26; 
 int enable1Pin = 14; 
+int relayPin = 12;
 const int freq = 30000;
 const int pwmChannel = 0;
 const int resolution = 8;
@@ -47,6 +49,7 @@ float lowTemp = 80;
 float currentTemp=70;
 char tempStatus[100];
 int pollDelay = 5000; // milliseconds;
+int tempV33=5;
 
 // configure the libraries and pins
 void setup(void) {
@@ -54,6 +57,14 @@ void setup(void) {
   Serial.begin(115200);
   sensors.begin(); // Start the DS18B20 sensor
   Serial.printf("%d OneWire devices found.\n", sensors.getDeviceCount());
+
+  // enable soil sensor voltage from pin D2
+  pinMode(soilV33,OUTPUT);
+  digitalWrite(soilV33, HIGH);
+
+  // enable soil sensor voltage from pin D2
+  pinMode(tempV33,OUTPUT);
+  digitalWrite(tempV33, HIGH);
 
   // report parasite power requirements
   Serial.printf("Parasite power mode is: %s\n", sensors.isParasitePowerMode() ? "ON": "OFF");
@@ -68,9 +79,15 @@ void setup(void) {
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(enable1Pin, pwmChannel);
 
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);
+
 }
 
 void loop(void) {
+  digitalWrite(soilV33, HIGH);
+  digitalWrite(tempV33, HIGH);
+  delay(1000);
   soilMoistureValue = analogRead(SensorPin);  //put Sensor insert into soil
   soilmoisturepercent = ( 100 - ( (soilMoistureValue/4095.00) * 100 ) );
   Serial.printf("Soil moisture is %i\%%\n", soilmoisturepercent);
@@ -91,7 +108,14 @@ void loop(void) {
     sprintf(tempStatus, "is in the desired range of %5.2f%c and %5.2fº%c.", lowTemp, tempScale, highTemp, tempScale);
   }
   Serial.printf("%5.2fº%c %s\n", currentTemp, tempScale, tempStatus);
-  delay(15000);
+  digitalWrite(soilV33, LOW);
+  digitalWrite(tempV33, LOW);
+  delay(10000);
+  Serial.println("Solenoid on ...");
+  digitalWrite(relayPin, HIGH);
+  delay(10000);
+  Serial.println("Solenoid off ...");
+  digitalWrite(relayPin, LOW);
 }
 
 void openVent(int _speed, int _duration) {
@@ -103,8 +127,7 @@ void openVent(int _speed, int _duration) {
   digitalWrite(motor1Pin2, LOW);
 }
 
-void closeVent(int _speed, int _duration) {
-  digitalWrite(motor1Pin1, LOW);
+void closeVent(int _speed, int _duration) {  
   digitalWrite(motor1Pin2, HIGH);
   ledcWrite(pwmChannel, _speed);   
   delay(_duration);
