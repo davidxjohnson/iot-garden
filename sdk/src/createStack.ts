@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import {
     discoverDefaultRegion,
     discoverDefaultAccount,
-    queryThings,
+    // queryThings,
     createPolicy,
     createThingGroup,
     createThing,
@@ -21,7 +21,7 @@ const flags: Command = new Command()
 // resource names
 const customerId = flags.opts()['customerId'];
 const namePrefix = flags.opts()['namePrefix'];
-const thingQuery = 'thingName:' + namePrefix + '-*';
+// const thingQuery = 'thingName:' + namePrefix + '-*';
 const groupName = namePrefix + '-group-' + customerId;
 const thingName = namePrefix + '-thing-' + customerId + '-001';
 const policyName = namePrefix + '-policy-' + customerId;
@@ -35,13 +35,12 @@ if (typeof (account) === 'undefined') {
     account = await discoverDefaultAccount()
 };
 
-const things = await queryThings(thingQuery, region)
-    .catch((err) => {
-        console.info("queryThings returned error:", err);
-        process.exit(1);
-    });
-console.info("List of things:", things);
-
+// const things = await queryThings(thingQuery, region)
+//     .catch((err) => {
+//         console.info("queryThings returned error:", err);
+//         process.exit(1);
+//     });
+// console.info("List of things:", things);
 
 const thingGroup = await createThingGroup(customerId, groupName, region)
     .catch((err) => {
