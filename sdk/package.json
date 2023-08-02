@@ -9,9 +9,9 @@
         "start": "node dist/index.js"
     },
     "dependencies": {
-        "@aws-sdk/client-iot": "^3.332.0",
-        "@aws-sdk/client-kms": "^3.332.0",
-        "@aws-sdk/client-ssm": "^3.332.0",
+        "@aws-sdk/client-iot": "^3.382.0",
+        "@aws-sdk/client-kms": "^3.382.0",
+        "@aws-sdk/client-ssm": "^3.382.0",
         "@tsconfig/node16-strictest-esm": "^1.0.3",
         "commander": "^10.0.1"
     },
