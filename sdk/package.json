@@ -13,7 +13,7 @@
         "@aws-sdk/client-kms": "^3.731.1",
         "@aws-sdk/client-ssm": "^3.682.0",
         "@tsconfig/node16-strictest-esm": "^1.0.3",
-        "commander": "^12.1.0"
+        "commander": "^13.1.0"
     },
     "devDependencies": {
         "@types/node": "^22.10.7",
