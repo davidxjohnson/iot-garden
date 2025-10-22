@@ -19,8 +19,8 @@ jobs:
     name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     
-    # Only run on dependabot PRs
-    if: github.event.pull_request.user.login == 'app/dependabot'
+    # Debug: temporarily remove condition to see actual values
+    # if: github.event.pull_request.user.login == 'app/dependabot'
     
     steps:
     - name: Checkout repository
@@ -42,6 +42,11 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
+          // Debug logging to understand GitHub context
+          console.log('🔍 DEBUG: github.actor:', JSON.stringify(github.actor));
+          console.log('🔍 DEBUG: github.event.pull_request.user:', JSON.stringify(context.payload.pull_request.user));
+          console.log('🔍 DEBUG: github.event.sender:', JSON.stringify(context.payload.sender));
+          
           const pr = await github.rest.pulls.get({
             owner: context.repo.owner,
             repo: context.repo.repo,
