@@ -9,10 +9,10 @@ permissions:
   checks: read
   statuses: read
 
-# Prevent race conditions - only allow one auto-merge workflow at a time
+# Prevent race conditions - only allow one auto-merge workflow at a time per PR
 concurrency:
-  group: dependabot-auto-merge-${{ github.repository }}
-  cancel-in-progress: false
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   auto-merge:
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     
     # Only run on dependabot PRs
-    if: github.actor == 'dependabot[bot]'
+    if: contains(github.actor, 'dependabot') || github.event.pull_request.user.login == 'app/dependabot'
     
     steps:
     - name: Checkout repository
