@@ -9,3 +9,35 @@ updates:
     directory: "/sdk"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    # Auto-merge configuration for autonomous updates
+    open-pull-requests-limit: 10
+    reviewers:
+      - "davidxjohnson"
+    assignees:
+      - "davidxjohnson"
+    # Group related updates together to reduce PR noise
+    groups:
+      aws-sdk:
+        patterns:
+          - "@aws-sdk/*"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-dependencies:
+        patterns:
+          - "@types/*"
+          - "typescript"
+        update-types:
+          - "minor"
+          - "patch"
+    # Commit message configuration
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Labels for easier identification
+    labels:
+      - "dependencies"
+      - "auto-merge-candidate"

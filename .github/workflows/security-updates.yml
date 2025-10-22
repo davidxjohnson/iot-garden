@@ -1,0 +1,179 @@
+name: Security Updates Handler
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  
+  # Run daily to check for security updates
+  schedule:
+    - cron: '0 9 * * *'  # 9 AM UTC daily
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  security-events: read
+
+jobs:
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'sdk/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: ./sdk
+      run: npm ci
+
+    - name: Run security audit
+      id: audit
+      working-directory: ./sdk
+      run: |
+        echo "Running npm audit..."
+        if npm audit --audit-level high --json > audit-report.json; then
+          echo "audit-status=clean" >> $GITHUB_OUTPUT
+          echo "✅ No high or critical vulnerabilities found"
+        else
+          echo "audit-status=vulnerabilities-found" >> $GITHUB_OUTPUT
+          echo "⚠️ Vulnerabilities detected"
+          cat audit-report.json
+        fi
+      continue-on-error: true
+
+    - name: Upload audit report
+      if: steps.audit.outputs.audit-status == 'vulnerabilities-found'
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-audit-report
+        path: sdk/audit-report.json
+
+    - name: Create security issue
+      if: steps.audit.outputs.audit-status == 'vulnerabilities-found' && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let auditData = {};
+          try {
+            auditData = JSON.parse(fs.readFileSync('sdk/audit-report.json', 'utf8'));
+          } catch (error) {
+            console.log('Could not read audit report');
+            return;
+          }
+          
+          if (!auditData.vulnerabilities || Object.keys(auditData.vulnerabilities).length === 0) {
+            console.log('No vulnerabilities in audit report');
+            return;
+          }
+          
+          const vulnerabilities = Object.entries(auditData.vulnerabilities);
+          const highCritical = vulnerabilities.filter(([name, vuln]) => 
+            vuln.severity === 'high' || vuln.severity === 'critical'
+          );
+          
+          if (highCritical.length === 0) {
+            console.log('No high or critical vulnerabilities found');
+            return;
+          }
+          
+          const title = `🔒 Security Vulnerabilities Detected - ${highCritical.length} high/critical`;
+          
+          let body = `## Security Audit Results\n\n`;
+          body += `Found ${highCritical.length} high or critical security vulnerabilities that need attention.\n\n`;
+          
+          body += `### High/Critical Vulnerabilities:\n\n`;
+          for (const [name, vuln] of highCritical) {
+            body += `- **${name}** (${vuln.severity})\n`;
+            body += `  - Via: ${vuln.via.join(', ')}\n`;
+            if (vuln.fixAvailable) {
+              body += `  - ✅ Fix available\n`;
+            } else {
+              body += `  - ❌ No fix available\n`;
+            }
+            body += `\n`;
+          }
+          
+          body += `\n### Action Required\n\n`;
+          body += `Please run \`npm audit fix\` in the \`sdk/\` directory to resolve these vulnerabilities.\n\n`;
+          body += `[View detailed audit report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: 'security',
+            state: 'open'
+          });
+          
+          const existingSecurityIssue = existingIssues.data.find(issue => 
+            issue.title.includes('Security Vulnerabilities Detected')
+          );
+          
+          if (existingSecurityIssue) {
+            // Update existing issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingSecurityIssue.number,
+              body: `## Updated Security Scan Results\n\n${body}`
+            });
+          } else {
+            // Create new issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'bug', 'high-priority']
+            });
+          }
+
+  handle-security-pr:
+    name: Handle Security PR
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' && contains(github.event.pull_request.title, 'security')
+    
+    steps:
+    - name: Add security labels and request review
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const pull_number = context.issue.number;
+          
+          // Add security labels
+          await github.rest.issues.addLabels({
+            owner,
+            repo,
+            issue_number: pull_number,
+            labels: ['security', 'needs-human-review', 'high-priority']
+          });
+          
+          // Request review from repository owner
+          await github.rest.pulls.requestReviewers({
+            owner,
+            repo,
+            pull_number,
+            reviewers: ['davidxjohnson']
+          });
+          
+          // Add detailed comment
+          await github.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: pull_number,
+            body: `🔒 **Security Update Detected**\n\nThis PR contains security-related updates that require human review before merging.\n\n**Important:** Please review the security implications of these changes before approving.\n\n- Check the CVE details and impact\n- Verify that the update doesn't break existing functionality\n- Consider testing in a staging environment\n\n**Auto-merge has been disabled** for this PR due to security implications.`
+          });
+          
+          console.log('✅ Security PR processed - added labels and requested review');

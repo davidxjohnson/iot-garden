@@ -1,0 +1,259 @@
+name: Dependabot Auto-Merge
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    
+    # Only run on dependabot PRs
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get PR details
+      id: pr-details
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const pr = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          });
+          
+          console.log('PR Title:', pr.data.title);
+          console.log('PR Labels:', pr.data.labels.map(l => l.name));
+          
+          return {
+            title: pr.data.title,
+            labels: pr.data.labels.map(l => l.name),
+            isDraft: pr.data.draft
+          };
+
+    - name: Wait for CI checks
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const sha = context.payload.pull_request.head.sha;
+          
+          // Wait for checks to complete (max 10 minutes)
+          const maxWaitTime = 10 * 60 * 1000; // 10 minutes
+          const startTime = Date.now();
+          
+          while (Date.now() - startTime < maxWaitTime) {
+            const checks = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: sha
+            });
+            
+            const statuses = await github.rest.repos.listCommitStatusesForRef({
+              owner,
+              repo,
+              ref: sha
+            });
+            
+            const allChecks = [...checks.data.check_runs, ...statuses.data];
+            
+            if (allChecks.length === 0) {
+              console.log('No checks found, waiting...');
+              await new Promise(resolve => setTimeout(resolve, 30000));
+              continue;
+            }
+            
+            const pending = allChecks.filter(check => 
+              check.status === 'queued' || 
+              check.status === 'in_progress' || 
+              check.state === 'pending'
+            );
+            
+            const failed = allChecks.filter(check => 
+              check.conclusion === 'failure' || 
+              check.state === 'failure' ||
+              check.state === 'error'
+            );
+            
+            if (failed.length > 0) {
+              console.log('Some checks failed, cannot auto-merge');
+              core.setFailed('CI checks failed');
+              return;
+            }
+            
+            if (pending.length === 0) {
+              console.log('All checks passed!');
+              return;
+            }
+            
+            console.log(`Waiting for ${pending.length} checks to complete...`);
+            await new Promise(resolve => setTimeout(resolve, 30000));
+          }
+          
+          core.setFailed('Timeout waiting for checks to complete');
+
+    - name: Auto-approve and merge
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const pull_number = context.issue.number;
+          
+          // Get the PR to check if it's still open
+          const pr = await github.rest.pulls.get({
+            owner,
+            repo,
+            pull_number
+          });
+          
+          if (pr.data.state !== 'open') {
+            console.log('PR is no longer open, skipping merge');
+            return;
+          }
+          
+          const title = pr.data.title.toLowerCase();
+          const labels = pr.data.labels.map(l => l.name.toLowerCase());
+          
+          // Determine merge strategy based on PR type
+          let shouldAutoMerge = false;
+          let mergeMethod = 'squash'; // Default to squash merge
+          
+          // Auto-merge patch and minor updates
+          if (title.includes('patch') || 
+              title.includes('minor') || 
+              labels.includes('auto-merge-candidate')) {
+            shouldAutoMerge = true;
+          }
+          
+          // Don't auto-merge major version updates or security updates without human review
+          if (title.includes('major') || 
+              title.includes('security') ||
+              title.includes('breaking')) {
+            console.log('Major version or security update detected, requiring manual review');
+            
+            // Add labels for human attention
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: pull_number,
+              labels: ['needs-human-review', 'major-version-update']
+            });
+            
+            // Create a comment explaining why auto-merge was skipped
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pull_number,
+              body: `🤖 **Auto-merge skipped**\n\nThis PR contains major version updates or security patches that require human review before merging.\n\nPlease review the changes and merge manually if appropriate.`
+            });
+            
+            return;
+          }
+          
+          if (shouldAutoMerge) {
+            try {
+              // Approve the PR
+              await github.rest.pulls.createReview({
+                owner,
+                repo,
+                pull_number,
+                event: 'APPROVE',
+                body: '🤖 Auto-approved by dependabot automation - CI checks passed'
+              });
+              
+              // Merge the PR
+              await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number,
+                merge_method: mergeMethod,
+                commit_title: `${pr.data.title} (#${pull_number})`,
+                commit_message: 'Auto-merged by dependabot automation'
+              });
+              
+              console.log('✅ Successfully auto-merged dependabot PR');
+              
+              // Add success comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body: `🎉 **Auto-merged successfully!**\n\nThis dependabot update has been automatically merged after all CI checks passed.`
+              });
+              
+            } catch (error) {
+              console.error('Failed to merge PR:', error);
+              
+              // Add failure comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body: `⚠️ **Auto-merge failed**\n\nFailed to automatically merge this PR. Please check for conflicts or merge manually.\n\nError: ${error.message}`
+              });
+              
+              // Add label for human attention
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: pull_number,
+                labels: ['auto-merge-failed']
+              });
+            }
+          } else {
+            console.log('PR does not meet auto-merge criteria');
+          }
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [auto-merge]
+    if: failure() && github.actor == 'dependabot[bot]'
+    
+    steps:
+    - name: Create issue on workflow failure
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `🚨 Dependabot Auto-Merge Workflow Failed`;
+          const body = `
+          The dependabot auto-merge workflow failed for PR #${{ github.event.number }}.
+          
+          **Failed workflow:** ${{ github.workflow }}
+          **Run ID:** ${{ github.run_id }}
+          **PR:** #${{ github.event.number }}
+          
+          Please investigate and resolve the issue.
+          
+          [View failed workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          `;
+          
+          // Check if a similar issue already exists
+          const existingIssues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: 'auto-merge-failure',
+            state: 'open'
+          });
+          
+          if (existingIssues.data.length === 0) {
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['bug', 'auto-merge-failure', 'needs-attention']
+            });
+          }

@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test and Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'sdk/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: ./sdk
+      run: npm ci
+
+    - name: Build project
+      working-directory: ./sdk
+      run: npm run build
+
+    - name: Run tests (if any)
+      working-directory: ./sdk
+      run: |
+        # Add test command when tests are available
+        # npm test
+        echo "No tests configured yet, build successful"
+
+    # Security audit
+    - name: Run security audit
+      working-directory: ./sdk
+      run: npm audit --audit-level high
+
+    # Check for outdated dependencies (informational)
+    - name: Check for outdated dependencies
+      working-directory: ./sdk
+      run: npm outdated || true
+      continue-on-error: true

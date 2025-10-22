@@ -1,0 +1,135 @@
+name: Automation Health Check
+on:
+  schedule:
+    # Run weekly on Sundays at 10 AM UTC
+    - cron: '0 10 * * 0'
+  
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  health-check:
+    name: Monitor Dependabot Automation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check Dependabot PR status
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          
+          // Get all open PRs from dependabot
+          const prs = await github.rest.pulls.list({
+            owner,
+            repo,
+            state: 'open'
+          });
+          
+          const dependabotPRs = prs.data.filter(pr => pr.user.login === 'dependabot[bot]');
+          
+          if (dependabotPRs.length === 0) {
+            console.log('✅ No open dependabot PRs');
+            return;
+          }
+          
+          console.log(`📊 Found ${dependabotPRs.length} open dependabot PRs`);
+          
+          const oldPRs = dependabotPRs.filter(pr => {
+            const prDate = new Date(pr.created_at);
+            const daysSince = (Date.now() - prDate.getTime()) / (1000 * 60 * 60 * 24);
+            return daysSince > 7;
+          });
+          
+          const stalePRs = dependabotPRs.filter(pr => {
+            const prDate = new Date(pr.updated_at);
+            const daysSince = (Date.now() - prDate.getTime()) / (1000 * 60 * 60 * 24);
+            return daysSince > 14;
+          });
+          
+          let report = `## Dependabot Automation Health Report\n\n`;
+          report += `**Report Date:** ${new Date().toISOString().split('T')[0]}\n\n`;
+          report += `### Summary\n\n`;
+          report += `- **Open Dependabot PRs:** ${dependabotPRs.length}\n`;
+          report += `- **PRs older than 7 days:** ${oldPRs.length}\n`;
+          report += `- **Stale PRs (>14 days):** ${stalePRs.length}\n\n`;
+          
+          if (oldPRs.length > 0) {
+            report += `### PRs Older Than 7 Days\n\n`;
+            for (const pr of oldPRs) {
+              const daysSince = Math.floor((Date.now() - new Date(pr.created_at).getTime()) / (1000 * 60 * 60 * 24));
+              report += `- [#${pr.number} ${pr.title}](${pr.html_url}) (${daysSince} days old)\n`;
+            }
+            report += `\n`;
+          }
+          
+          if (stalePRs.length > 0) {
+            report += `### Stale PRs Requiring Attention\n\n`;
+            for (const pr of stalePRs) {
+              const daysSince = Math.floor((Date.now() - new Date(pr.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+              report += `- [#${pr.number} ${pr.title}](${pr.html_url}) (stale for ${daysSince} days)\n`;
+            }
+            report += `\n**Action Required:** These PRs may need manual intervention.\n\n`;
+          }
+          
+          // Check for failed auto-merge attempts
+          const issues = await github.rest.issues.listForRepo({
+            owner,
+            repo,
+            labels: 'auto-merge-failed',
+            state: 'open'
+          });
+          
+          if (issues.data.length > 0) {
+            report += `### Failed Auto-Merge Attempts\n\n`;
+            for (const issue of issues.data) {
+              report += `- [${issue.title}](${issue.html_url})\n`;
+            }
+            report += `\n`;
+          }
+          
+          if (oldPRs.length > 3 || stalePRs.length > 0 || issues.data.length > 0) {
+            // Create or update monitoring issue
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              labels: 'automation-monitoring',
+              state: 'open'
+            });
+            
+            if (existingIssues.data.length > 0) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: existingIssues.data[0].number,
+                body: report
+              });
+            } else {
+              // Create new monitoring issue
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: '📊 Dependabot Automation Monitoring',
+                body: report,
+                labels: ['automation-monitoring', 'maintenance']
+              });
+            }
+          }
+          
+          console.log('📊 Health check completed');
+          
+          // Output summary for workflow logs
+          core.summary.addHeading('Dependabot Health Check Summary');
+          core.summary.addTable([
+            [{data: 'Metric', header: true}, {data: 'Count', header: true}],
+            ['Open Dependabot PRs', dependabotPRs.length.toString()],
+            ['PRs older than 7 days', oldPRs.length.toString()],
+            ['Stale PRs (>14 days)', stalePRs.length.toString()],
+            ['Failed auto-merge attempts', issues.data.length.toString()]
+          ]);
+          await core.summary.write();
