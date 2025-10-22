@@ -41,3 +41,8 @@ updates:
     labels:
       - "dependencies"
       - "auto-merge-candidate"
+    # Ignore rules to maintain Node 20 compatibility
+    ignore:
+      # Stay on Node 20 types - ignore Node 22+ types
+      - dependency-name: "@types/node"
+        versions: [">= 22.0.0"]
