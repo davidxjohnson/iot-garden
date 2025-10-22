@@ -19,8 +19,8 @@ jobs:
     name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     
-    # Only run on dependabot PRs - temporarily removed condition for testing
-    # if: github.event.pull_request.user.login == 'app/dependabot'
+    # Only run on dependabot PRs
+    if: github.event.pull_request.user.login == 'app/dependabot'
     
     steps:
     - name: Checkout repository
@@ -98,13 +98,14 @@ jobs:
                 continue;
               }
               
-              // Filter out this workflow's own checks to avoid circular dependency
-              const relevantChecks = allChecks.filter(check => 
-                !check.name?.includes('Dependabot Auto-Merge') &&
-                !check.name?.includes('Security Updates Handler')
-              );
-              
-              const pending = relevantChecks.filter(check => 
+          // Filter out this workflow's own checks to avoid circular dependency
+          const relevantChecks = allChecks.filter(check => 
+            !check.name?.includes('Dependabot Auto-Merge') &&
+            !check.name?.includes('Security Updates Handler') &&
+            !check.name?.includes('Notify on Failure') &&
+            check.name !== 'Auto-merge Dependabot PRs' &&
+            check.name !== 'Notify on Failure'
+          );              const pending = relevantChecks.filter(check => 
                 check.status === 'queued' || 
                 check.status === 'in_progress' || 
                 check.state === 'pending'
