@@ -9,6 +9,11 @@ permissions:
   checks: read
   statuses: read
 
+# Prevent race conditions - only allow one auto-merge workflow at a time
+concurrency:
+  group: dependabot-auto-merge-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   auto-merge:
     name: Auto-merge Dependabot PRs
@@ -22,6 +27,15 @@ jobs:
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Stagger concurrent workflows
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Add random delay 0-30 seconds to prevent race conditions
+          const delay = Math.floor(Math.random() * 30000);
+          console.log(`⏲️ Staggering workflow start by ${Math.round(delay/1000)} seconds to prevent race conditions`);
+          await new Promise(resolve => setTimeout(resolve, delay));
 
     - name: Get PR details
       id: pr-details
@@ -49,59 +63,90 @@ jobs:
         script: |
           const { owner, repo } = context.repo;
           const sha = context.payload.pull_request.head.sha;
+          const pr_number = context.payload.pull_request.number;
           
-          // Wait for checks to complete (max 10 minutes)
-          const maxWaitTime = 10 * 60 * 1000; // 10 minutes
+          console.log(`🔍 Waiting for CI checks on PR #${pr_number} (${sha.substring(0, 7)})`);
+          
+          // Reduced wait time to 5 minutes to prevent long queues
+          const maxWaitTime = 5 * 60 * 1000; // 5 minutes
           const startTime = Date.now();
+          let checkCount = 0;
           
           while (Date.now() - startTime < maxWaitTime) {
-            const checks = await github.rest.checks.listForRef({
-              owner,
-              repo,
-              ref: sha
-            });
+            checkCount++;
+            console.log(`📊 Check attempt #${checkCount} (${Math.round((Date.now() - startTime) / 1000)}s elapsed)`);
             
-            const statuses = await github.rest.repos.listCommitStatusesForRef({
-              owner,
-              repo,
-              ref: sha
-            });
-            
-            const allChecks = [...checks.data.check_runs, ...statuses.data];
-            
-            if (allChecks.length === 0) {
-              console.log('No checks found, waiting...');
-              await new Promise(resolve => setTimeout(resolve, 30000));
-              continue;
+            try {
+              const checks = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: sha
+              });
+              
+              const statuses = await github.rest.repos.listCommitStatusesForRef({
+                owner,
+                repo,
+                ref: sha
+              });
+              
+              const allChecks = [...checks.data.check_runs, ...statuses.data];
+              console.log(`📋 Found ${allChecks.length} total checks`);
+              
+              if (allChecks.length === 0) {
+                console.log('⏳ No checks found yet, waiting...');
+                await new Promise(resolve => setTimeout(resolve, 20000)); // Reduced from 30s to 20s
+                continue;
+              }
+              
+              // Filter out this workflow's own checks to avoid circular dependency
+              const relevantChecks = allChecks.filter(check => 
+                !check.name?.includes('Dependabot Auto-Merge') &&
+                !check.name?.includes('Security Updates Handler')
+              );
+              
+              const pending = relevantChecks.filter(check => 
+                check.status === 'queued' || 
+                check.status === 'in_progress' || 
+                check.state === 'pending'
+              );
+              
+              const failed = relevantChecks.filter(check => 
+                check.conclusion === 'failure' || 
+                check.state === 'failure' ||
+                check.state === 'error'
+              );
+              
+              const successful = relevantChecks.filter(check =>
+                check.conclusion === 'success' ||
+                check.state === 'success'
+              );
+              
+              console.log(`✅ Successful: ${successful.length}, ⏳ Pending: ${pending.length}, ❌ Failed: ${failed.length}`);
+              
+              if (failed.length > 0) {
+                console.log('❌ Some checks failed:');
+                failed.forEach(check => console.log(`  - ${check.name}: ${check.conclusion || check.state}`));
+                core.setFailed('CI checks failed');
+                return;
+              }
+              
+              if (pending.length === 0 && successful.length > 0) {
+                console.log('🎉 All relevant checks passed!');
+                return;
+              }
+              
+              console.log(`⏳ Still waiting for ${pending.length} checks...`);
+              pending.forEach(check => console.log(`  - ${check.name}: ${check.status || check.state}`));
+              
+              await new Promise(resolve => setTimeout(resolve, 20000));
+              
+            } catch (error) {
+              console.error('❌ Error checking CI status:', error);
+              await new Promise(resolve => setTimeout(resolve, 20000));
             }
-            
-            const pending = allChecks.filter(check => 
-              check.status === 'queued' || 
-              check.status === 'in_progress' || 
-              check.state === 'pending'
-            );
-            
-            const failed = allChecks.filter(check => 
-              check.conclusion === 'failure' || 
-              check.state === 'failure' ||
-              check.state === 'error'
-            );
-            
-            if (failed.length > 0) {
-              console.log('Some checks failed, cannot auto-merge');
-              core.setFailed('CI checks failed');
-              return;
-            }
-            
-            if (pending.length === 0) {
-              console.log('All checks passed!');
-              return;
-            }
-            
-            console.log(`Waiting for ${pending.length} checks to complete...`);
-            await new Promise(resolve => setTimeout(resolve, 30000));
           }
           
+          console.log('⏰ Timeout reached waiting for checks to complete');
           core.setFailed('Timeout waiting for checks to complete');
 
     - name: Auto-approve and merge
@@ -164,6 +209,31 @@ jobs:
           
           if (shouldAutoMerge) {
             try {
+              // Double-check PR is still open and mergeable
+              const latestPR = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number
+              });
+              
+              if (latestPR.data.state !== 'open') {
+                console.log('🔒 PR is no longer open (already merged or closed)');
+                return;
+              }
+              
+              if (latestPR.data.mergeable === false) {
+                console.log('⚠️ PR is not mergeable (conflicts detected)');
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: pull_number,
+                  body: `⚠️ **Auto-merge blocked**\n\nThis PR has merge conflicts and cannot be automatically merged. Please resolve conflicts manually.`
+                });
+                return;
+              }
+              
+              console.log(`🤖 Attempting to auto-merge PR #${pull_number}...`);
+              
               // Approve the PR
               await github.rest.pulls.createReview({
                 owner,
@@ -173,8 +243,11 @@ jobs:
                 body: '🤖 Auto-approved by dependabot automation - CI checks passed'
               });
               
+              // Small delay before merge to ensure approval is processed
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
               // Merge the PR
-              await github.rest.pulls.merge({
+              const mergeResult = await github.rest.pulls.merge({
                 owner,
                 repo,
                 pull_number,
@@ -184,24 +257,33 @@ jobs:
               });
               
               console.log('✅ Successfully auto-merged dependabot PR');
+              console.log(`📄 Merge SHA: ${mergeResult.data.sha}`);
               
               // Add success comment
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: pull_number,
-                body: `🎉 **Auto-merged successfully!**\n\nThis dependabot update has been automatically merged after all CI checks passed.`
+                body: `🎉 **Auto-merged successfully!**\n\nThis dependabot update has been automatically merged after all CI checks passed.\n\n**Merge commit:** \`${mergeResult.data.sha.substring(0, 7)}\``
               });
               
             } catch (error) {
-              console.error('Failed to merge PR:', error);
+              console.error('❌ Failed to merge PR:', error);
+              
+              // Check if it's a specific merge conflict
+              let errorMessage = error.message;
+              if (error.status === 409) {
+                errorMessage = 'Another merge operation may be in progress, or there are merge conflicts.';
+              } else if (error.status === 422) {
+                errorMessage = 'PR is not in a mergeable state (possibly already merged by another process).';
+              }
               
               // Add failure comment
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number: pull_number,
-                body: `⚠️ **Auto-merge failed**\n\nFailed to automatically merge this PR. Please check for conflicts or merge manually.\n\nError: ${error.message}`
+                body: `⚠️ **Auto-merge failed**\n\nFailed to automatically merge this PR. Please check for conflicts or merge manually.\n\n**Error:** ${errorMessage}\n\n**Status Code:** ${error.status || 'unknown'}`
               });
               
               // Add label for human attention
