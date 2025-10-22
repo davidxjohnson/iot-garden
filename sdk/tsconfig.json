@@ -1,17 +1,27 @@
 {
-  "extends": "@tsconfig/node16-strictest-esm/tsconfig.json",
   "compilerOptions": {
     "moduleResolution": "node",
-    "baseUrl": "./", // This must be specified if "paths" is.
-    // "module": "CommonJS",
-    "module": "ESNext", // to allow top-level await
-    "target": "ES2019", // to allow top-level await
+    "baseUrl": "./",
+    "module": "ESNext",
+    "target": "ES2019",
     "outDir": "./dist",
-    // "traceResolution": true,
-    // "esModuleInterop": true,
-    // "resolveJsonModule": true,
     "strict": true,
-    "ignoreDeprecations": "5.0",
+    "allowJs": false,
+    "declaration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
     "useUnknownInCatchVariables": false
   },
   "include": [
