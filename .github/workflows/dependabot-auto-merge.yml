@@ -19,8 +19,8 @@ jobs:
     name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     
-    # Only run on dependabot PRs  
-    if: github.event.pull_request.user.login == 'app/dependabot'
+    # Only run on dependabot PRs - temporarily removed condition for testing
+    # if: github.event.pull_request.user.login == 'app/dependabot'
     
     steps:
     - name: Checkout repository
