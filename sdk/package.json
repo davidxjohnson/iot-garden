@@ -11,7 +11,7 @@
     "dependencies": {
         "@aws-sdk/client-iot": "^3.908.0",
         "@aws-sdk/client-kms": "^3.913.0",
-        "@aws-sdk/client-ssm": "^3.908.0",
+        "@aws-sdk/client-ssm": "^3.914.0",
         "@tsconfig/node16-strictest-esm": "^1.0.3",
         "commander": "^14.0.1"
     },
