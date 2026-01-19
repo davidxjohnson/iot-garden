@@ -20,7 +20,7 @@
         "commander": "^14.0.2"
     },
     "devDependencies": {
-        "@types/node": "^20.19.28",
+        "@types/node": "^20.19.30",
         "typescript": "^5.9.3"
     }
 }
