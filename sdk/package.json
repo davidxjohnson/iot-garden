@@ -17,7 +17,7 @@
         "@aws-sdk/client-ssm": "^3.1041.0",
         "@aws-sdk/client-sts": "^3.1041.0",
         "@aws-sdk/credential-provider-node": "^3.914.0",
-        "commander": "^14.0.3"
+        "commander": "^15.0.0"
     },
     "devDependencies": {
         "@types/node": "^20.19.39",
