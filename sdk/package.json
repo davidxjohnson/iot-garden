@@ -12,10 +12,10 @@
         "start": "node dist/index.js"
     },
     "dependencies": {
-        "@aws-sdk/client-iot": "^3.1041.0",
-        "@aws-sdk/client-kms": "^3.1041.0",
-        "@aws-sdk/client-ssm": "^3.1041.0",
-        "@aws-sdk/client-sts": "^3.1041.0",
+        "@aws-sdk/client-iot": "^3.1063.0",
+        "@aws-sdk/client-kms": "^3.1063.0",
+        "@aws-sdk/client-ssm": "^3.1063.0",
+        "@aws-sdk/client-sts": "^3.1063.0",
         "@aws-sdk/credential-provider-node": "^3.914.0",
         "commander": "^15.0.0"
     },
